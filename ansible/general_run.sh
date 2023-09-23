@@ -2,15 +2,15 @@
 
 # Configuration variables
 INVENTORY_FILE="inventory.ini"
-LAUNCH_SCRIPT_PLAYBOOK="./launch_script.ansible.yml"
-NGINX_PLAYBOOK=".//nginx_conf.ansible.yml"
-NGINX_CONFIG_FILE="./nginx_config.txt"
+PROVISION_PLAYBOOK="./server/provision_server.ansible.yml"
+NGINX_PLAYBOOK="./nginx_deploy/nginx_conf.ansible.yml"
+NGINX_CONFIG_FILE="./nginx_deploy/nginx_config.txt"
 
 # Function to list all servers and allow the user to choose one
 choose_server() {
   echo "Available servers:"
   servers=$(ansible-inventory --list -i $INVENTORY_FILE | jq -r '.servers.hosts[]')
-  
+
   count=1
   for i in $servers; do
     echo "$count) $i"
@@ -24,16 +24,15 @@ choose_server() {
   target_ip=$(ansible-inventory --list -i $INVENTORY_FILE | jq -r --arg host "$selected_server" '._meta.hostvars[$host].ansible_host')
   target_user=$(ansible-inventory --list -i $INVENTORY_FILE | jq -r --arg host "$selected_server" '._meta.hostvars[$host].ansible_user')
 
-  # Prompt for SSH password
   echo "Enter SSH password for the target server:"
   read -s ssh_password
 }
+
 # Function to prompt for Nginx parameters
 prompt_nginx_parameters() {
   echo "Enter the name for the generated Nginx configuration file:"
   read nginx_conf_name
-  
-  # Check if the filename ends with .conf and append it if not
+
   if [[ ! $nginx_conf_name == *.conf ]]; then
     nginx_conf_name="$nginx_conf_name.conf"
   fi
@@ -59,12 +58,11 @@ prompt_nginx_parameters() {
   read user_input
   [ ! -z "$user_input" ] && ENABLE_CACHE_CONTROL=$user_input
 
-  # Generate and save the Nginx config to a temp file
   ./generate_nginx_conf_script.sh -p $PORT -s $SERVER_NAME -r $ENABLE_RATE_LIMITING -c $ENABLE_CACHE -C $ENABLE_CACHE_CONTROL > "$NGINX_CONFIG_FILE"
 }
+
 # Main Script Starts Here
 choose_server
-prompt_nginx_parameters
 
 ansible_extra_vars=$(cat << EOM
 {
@@ -74,23 +72,32 @@ ansible_extra_vars=$(cat << EOM
   "target_user": "$target_user",
   "target_ip": "$target_ip",
   "ssh_password": "$ssh_password",
-  "ansible_become_pass": "$ssh_password",
-  "nginx_conf_name": "$nginx_conf_name",
-  "nginx_config_file": "./nginx_config.txt"
+  "ansible_become_pass": "$ssh_password"
 }
 EOM
 )
 
-echo "Do you want to 1) Create Nginx conf, 2) Create execution script, or 3) Do both?"
+echo "What would you like to do?"
+echo "1) Provision Server"
+echo "2) Configure Nginx"
+echo "3) Exit"
 read choice
 
 if [ "$choice" == "1" ]; then
-  ansible-playbook -i "$INVENTORY_FILE" --limit "$selected_server" -e "$ansible_extra_vars" "$NGINX_PLAYBOOK"
+  ansible-playbook -i "$INVENTORY_FILE" --limit "$selected_server" -e "$ansible_extra_vars" "$PROVISION_PLAYBOOK"
 elif [ "$choice" == "2" ]; then
-  ansible-playbook -i "$INVENTORY_FILE" --limit "$selected_server" -e "$ansible_extra_vars" "$LAUNCH_SCRIPT_PLAYBOOK"
+  prompt_nginx_parameters
+  nginx_ansible_extra_vars=$(cat << EOM
+{
+  "nginx_conf_name": "$nginx_conf_name",
+  "nginx_config_file": "$NGINX_CONFIG_FILE"
+}
+EOM
+  )
+  combined_ansible_extra_vars=$(echo $ansible_extra_vars $nginx_ansible_extra_vars | jq -s 'add')
+  ansible-playbook -i "$INVENTORY_FILE" --limit "$selected_server" -e "$combined_ansible_extra_vars" "$NGINX_PLAYBOOK"
 elif [ "$choice" == "3" ]; then
-  ansible-playbook -i "$INVENTORY_FILE" --limit "$selected_server" -e "$ansible_extra_vars" "$NGINX_PLAYBOOK"
-  ansible-playbook -i "$INVENTORY_FILE" --limit "$selected_server" -e "$ansible_extra_vars" "$LAUNCH_SCRIPT_PLAYBOOK"
+  echo "Exiting."
 else
   echo "Invalid choice. Exiting."
 fi

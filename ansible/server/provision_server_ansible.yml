@@ -1,0 +1,69 @@
+---
+- hosts: your_target_host_group
+  become: true
+  vars_files:
+    - vars/main.yml  # Assuming you have defined your variables here
+  
+  tasks:
+    - name: Update and upgrade apt packages
+      apt:
+        update_cache: yes
+        upgrade: yes
+      notify: restart nginx  # This will notify the handler to restart nginx
+
+    - name: Add a new user
+      user:
+        name: "{{ new_user }}"
+        password: "{{ new_user_password | password_hash('sha512') }}"
+        groups: sudo
+
+    - name: Fetch latest Node.js LTS version
+      shell: "curl -s https://nodejs.org/en/download/ | grep -oP 'Latest LTS Version: \\K[0-9]+\\.[0-9]+\\.[0-9]+'"
+      register: latest_node_version
+      changed_when: false
+
+    - name: Install latest Node.js LTS version
+      shell: |
+        curl -fsSL https://deb.nodesource.com/setup_{{ latest_node_version.stdout }}.x | sudo -E bash -
+        sudo apt-get install -y nodejs
+      when: "'{{ latest_node_version.stdout }}' is version('14.0.0', '>=')"
+
+    - name: Install essential packages
+      apt:
+        name:
+          - gcc
+          - g++
+          - make
+          - nginx
+          - mysql-server
+          - mongodb
+        state: present
+
+    - name: Start essential services
+      systemd:
+        name: "{{ item }}"
+        state: started
+      loop:
+        - nginx
+        - mysql
+        - mongodb
+
+    - name: Install Node.js global packages
+      npm:
+        name: "{{ item }}"
+        global: yes
+      loop:
+        - pm2
+        - pnpm
+
+    - name: Install Yarn package manager
+      shell: |
+        curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg >/dev/null
+        echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
+        sudo apt-get update && sudo apt-get install yarn
+
+  handlers:
+    - name: restart nginx
+      systemd:
+        name: nginx
+        state: restarted
