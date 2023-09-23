@@ -3,6 +3,11 @@
   become: true
   vars_files:
     - vars/main.yml  # Assuming you have defined your variables here
+
+  vars_prompt:
+    - name: "new_user_password"
+      prompt: "Enter the password for the new user"
+      private: yes
   
   tasks:
     - name: Update and upgrade apt packages
