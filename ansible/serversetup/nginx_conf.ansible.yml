@@ -1,0 +1,53 @@
+- hosts: '{{ selected_server }}'
+  remote_user: '{{ target_user }}'
+  become: yes
+  vars:
+    ansible_ssh_pass: '{{ ssh_password }}'
+    ansible_become_pass: '{{ ansible_become_pass }}'
+  vars_prompt:
+    # - name: 'nginx_conf_name'
+    #   prompt: 'Enter the filename for the Nginx configuration (e.g., mysite.conf)'
+    #   private: no
+    # - name: 'nginx_config_file'
+    #   prompt: 'Enter the path to your nginx configuration file (e.g., /path/to/nginx_config.txt)'
+    #   private: no
+
+  pre_tasks:
+    - name: Print Nginx information
+      debug:
+        msg: '-----> Information about Nginx Configuration <-----'
+
+    - name: Show provided configuration
+      debug:
+        msg:
+          - 'Target IP: {{ selected_server }}'
+          - 'Target User: {{ target_user }}'
+          - 'Nginx Config Name: {{ nginx_conf_name }}'
+          - 'Path to Nginx Config: {{ nginx_config_file }}'
+
+    - name: Confirm to proceed
+      pause:
+        prompt: 'Please review your inputs and press enter to continue or Ctrl+C to abort.'
+
+  tasks:
+    - name: Set up Nginx configuration in sites-available
+      copy:
+        src: '{{ nginx_config_file }}'
+        dest: '/etc/nginx/sites-available/{{ nginx_conf_name }}'
+
+    - name: Ensure Nginx configuration is enabled
+      command: ln -s "/etc/nginx/sites-available/{{ nginx_conf_name }}" "/etc/nginx/sites-enabled/{{ nginx_conf_name }}"
+      args:
+        creates: '/etc/nginx/sites-enabled/{{ nginx_conf_name }}'
+
+    - name: Test Nginx configuration
+      command: nginx -t
+      register: nginx_test_output
+      failed_when: '"failed" in nginx_test_output.stderr'
+      notify: Reload nginx
+      
+  handlers:
+    - name: Reload nginx
+      service:
+        name: nginx
+        state: reloaded

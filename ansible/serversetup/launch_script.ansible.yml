@@ -1,0 +1,46 @@
+- hosts: '{{ selected_server }}'
+  remote_user: '{{ target_user }}'
+  # become: yes
+  vars:
+    ansible_ssh_pass: '{{ ssh_password }}'  
+    ansible_become_pass: '{{ ansible_become_pass }}'
+  vars_prompt:
+    - name: 'script_path'
+      prompt: 'Enter the path where the restart script should be placed (e.g., /home/your_username/scripts)'
+      private: no
+    - name: 'script_name'
+      prompt: 'Enter the name for the restart script (e.g., restart_app.sh)'
+      private: no
+    - name: 'restart_script_file'
+      prompt: 'Enter the path to your restart script file (e.g., /path/to/restart_script.txt)'
+      private: no
+
+  pre_tasks:
+    - name: Print script information
+      debug:
+        msg: '-----> Information about start script <-----'
+        
+    - name: Show provided configuration
+      debug:
+        msg:
+          - 'Target IP: {{ selected_server }}'
+          - 'Target User: {{ target_user }}'
+          - 'Script Path: {{ script_path }}'
+          - 'Script Name: {{ script_name }}'
+          - 'Path to Restart Script: {{ restart_script_file }}'
+
+    - name: Confirm to proceed
+      pause:
+        prompt: 'Please review your inputs and press enter to continue or Ctrl+C to abort.'
+
+  tasks:
+    - name: Ensure script directory exists
+      file:
+        path: '{{ script_path }}'
+        state: directory
+
+    - name: Copy restart script content from file
+      copy:
+        src: '{{ restart_script_file }}'
+        dest: '{{ script_path }}/{{ script_name }}'
+        mode: '0755'

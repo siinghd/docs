@@ -1,0 +1,286 @@
+#!/bin/bash
+
+# Function to exit script on error
+function exit_on_error {
+    echo "$1" 1>&2
+    exit 1
+}
+
+# Function to perform common operations
+function common_operations {
+    cp "$SOURCE_ENV" "$DEST_ENV" || exit_on_error "Failed to copy .env file"
+    cd "$DEST_DIR" || exit_on_error "Failed to change to directory $DEST_DIR"
+    pnpm install || exit_on_error "Failed to install dependencies"
+    pnpm lint:fix || echo "Lint auto-fix script not found or failed to execute"
+    pnpm build || exit_on_error "Failed to build the project"
+}
+
+# Parse arguments
+while getopts ":e:p:t:P:s:r:b:c:" opt; do
+  case $opt in
+    e) ENV_NAME="$OPTARG" ;;
+    p) PROJECT_NAME="$OPTARG" ;;
+    t) TYPE="$OPTARG" ;;
+    P) PORT="$OPTARG" ;;
+    s) SERVER_NAME="$OPTARG" ;;
+    r) RATE_LIMIT="$OPTARG" ;;
+    b) RATE_BURST="$OPTARG" ;;
+    c) CACHE="$OPTARG" ;;
+    *) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
+  esac
+done
+
+# Validate mandatory arguments
+: ${ENV_NAME:? "Missing -e [env_name]"}
+: ${PROJECT_NAME:? "Missing -p [project_name]"}
+: ${TYPE:? "Missing -t [type: frontend/backend]"}
+: ${SERVER_NAME:? "Missing -s [server_name]"}
+: ${PORT:=3603}  # Default port is 3603
+
+# If RATE_LIMIT is provided but RATE_BURST is not, set a default RATE_BURST value
+if [ ! -z "$RATE_LIMIT" ] && [ -z "$RATE_BURST" ]; then
+    RATE_BURST=5
+fi
+
+# Variables
+SOURCE_ENV="/home/dev/envs/${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}.env"
+DEST_DIR="/home/dev/sites/$PROJECT_NAME/${ENV_NAME}/${TYPE}"
+DEST_ENV="$DEST_DIR/.env"
+PM2_NAME="${PROJECT_NAME}_${ENV_NAME}_${TYPE}"
+NGINX_CONF="/etc/nginx/sites-available/${PROJECT_NAME}_${ENV_NAME}_${TYPE}.conf"
+CACHE_CONTROL="add_header Cache-Control "no-cache, private";"
+if [ "$CACHE" == "true" ]; then
+    CACHE_CONTROL="add_header Cache-Control "public, max-age=31536000, immutable";"
+fi
+
+# Create source .env file if needed
+if [ ! -f "$SOURCE_ENV" ]; then
+    echo "Creating $SOURCE_ENV with default values..."
+    echo -e "KEY=DEFAULT_VALUE
+PORT=$PORT" > "$SOURCE_ENV" || exit_on_error "Failed to create $SOURCE_ENV"
+fi
+
+# Perform common operations
+common_operations
+
+# Manage PM2 process
+pm2 delete "$PM2_NAME"
+if [ "$TYPE" == "frontend" ]; then
+    pm2 start "PORT=$PORT npm start" --name "$PM2_NAME" || exit_on_error "Failed to start PM2 process"
+elif [ "$TYPE" == "backend" ]; then
+    pm2 start "build/src/index.js" --name "$PM2_NAME" -i max || exit_on_error "Failed to start PM2 process"
+fi
+
+# Create Nginx configuration if it doesn't exist
+if [ ! -f "$NGINX_CONF" ]; then
+    echo "Creating Nginx configuration..."
+    cat <<EOL > "$NGINX_CONF"
+server {
+    listen 80;
+    server_name $SERVER_NAME;
+    client_max_body_size 100M;
+    
+    # Rate Limiting
+    limit_req_zone \$binary_remote_addr zone=mylimit:10m rate=${RATE_LIMIT}r/s;
+    limit_req zone=mylimit burst=${RATE_BURST};
+    
+    location / {
+        proxy_pass http://localhost:$PORT;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host \$host;
+        proxy_cache_bypass \$http_upgrade;
+        $CACHE_CONTROL
+    }
+    
+    error_page 500 502 503 504 /50x.html;
+    location = /50x.html {
+        root /usr/share/nginx/html;
+    }
+}
+EOL
+    sudo nginx -s reload || exit_on_error "Failed to reload Nginx"
+fi
+
+
+
+
+
+
+/////////////////////////
+/////////////////////////
+//////////////////////////
+cp /home/dev/envs/ticketing_system_backend_prod.env /home/dev/sites/ticketing-system/prod/backend/.env
+cd /home/dev/sites/ticketing-system/prod/backend
+pnpm install
+pnpm build
+pm2 delete ticketing_system_backend_prod
+pm2  --name ticketing_system_backend start build/src/index.js -i max
+
+cp /home/dev/envs/ticketing_system_frontend_dev.env /home/dev/sites/ticketing-system/dev/frontend/.env
+cd /home/dev/sites/ticketing-system/frontend
+pnpm install
+pnpm build
+pm2 delete ticketing_system_frontend_dev
+pm2 start "PORT=3603 npm start" --name ticketing_system_frontend_dev
+
+
+///
+#!/bin/bash
+# Script for setting up the ticketing system frontend
+
+# Function to exit script on error
+function exit_on_error {
+    echo "$1" 1>&2
+    exit 1
+}
+
+# Variables
+SOURCE_ENV="/home/dev/envs/ticketing_system_frontend_dev.env"
+DEST_DIR="/home/dev/sites/ticketing-system/frontend"
+DEST_ENV="$DEST_DIR/.env"
+PM2_NAME="ticketing_system_frontend_dev"
+PORT=3603
+
+# Check and create source .env file if needed
+if [ ! -f "$SOURCE_ENV" ]; then
+    echo "Creating $SOURCE_ENV with default values..."
+    echo "KEY=DEFAULT_VALUE" > "$SOURCE_ENV" || exit_on_error "Failed to create $SOURCE_ENV"
+fi
+
+# Copy the .env file
+cp "$SOURCE_ENV" "$DEST_ENV" || exit_on_error "Failed to copy .env file"
+
+# Change to the destination directory
+cd "$DEST_DIR" || exit_on_error "Failed to change to directory $DEST_DIR"
+
+# Install dependencies
+pnpm install || exit_on_error "Failed to install dependencies"
+
+# Build the project
+pnpm build || exit_on_error "Failed to build the project"
+
+# Manage PM2 process
+pm2 delete "$PM2_NAME" || exit_on_error "Failed to delete PM2 process"
+pm2 start "PORT=$PORT npm start" --name "$PM2_NAME" || exit_on_error "Failed to start PM2 process"
+
+
+//
+
+#!/bin/bash
+
+# Function to exit script on error
+function exit_on_error {
+    echo "$1" 1>&2
+    exit 1
+}
+
+# Generalized Variables
+SOURCE_ENV="/home/dev/envs/service_prod.env"
+DEST_DIR="/home/dev/sites/service/prod"
+DEST_ENV="$DEST_DIR/.env"
+PM2_NAME="service_prod"
+
+# Port Variable
+DEFAULT_PORT=3000
+
+# Check and create source .env file if needed
+if [ ! -f "$SOURCE_ENV" ]; then
+    echo "Creating $SOURCE_ENV with default values..."
+    echo "KEY=DEFAULT_VALUE" > "$SOURCE_ENV" || exit_on_error "Failed to create $SOURCE_ENV"
+    echo "PORT=$DEFAULT_PORT" > "$SOURCE_ENV" || exit_on_error "Failed to create $SOURCE_ENV"
+fi
+
+# Copy the .env file only if the destination doesn't exist
+cp -n "$SOURCE_ENV" "$DEST_ENV" || exit_on_error "Failed to copy .env file"
+
+# Change to the destination directory
+cd "$DEST_DIR" || exit_on_error "Failed to change to directory $DEST_DIR"
+
+# Install dependencies
+pnpm install || exit_on_error "Failed to install dependencies"
+
+# Build the project
+pnpm build || exit_on_error "Failed to build the project"
+
+# Manage PM2 process
+pm2 delete "$PM2_NAME" || exit_on_error "Failed to delete PM2 process"
+PORT=$DEFAULT_PORT pm2 start build/src/index.js --name "$PM2_NAME" -i max || exit_on_error "Failed to start PM2 process"
+
+
+#!/bin/bash
+
+# Function to exit script on error
+function exit_on_error {
+    echo "$1" 1>&2
+    exit 1
+}
+
+# Function to perform common operations
+function common_operations {
+    # Copy the .env file
+    cp "$SOURCE_ENV" "$DEST_ENV" || exit_on_error "Failed to copy .env file"
+  
+    # Change to the destination directory
+    cd "$DEST_DIR" || exit_on_error "Failed to change to directory $DEST_DIR"
+  
+    # Install dependencies
+    pnpm install || exit_on_error "Failed to install dependencies"
+  
+    # Auto-fix linting errors
+    pnpm lint:fix || echo "Lint auto-fix script not found or failed to execute"
+  
+    # Build the project
+    pnpm build || exit_on_error "Failed to build the project"
+}
+
+# Parse arguments
+while getopts ":e:p:t:P:s:" opt; do
+  case $opt in
+    e) ENV_NAME="$OPTARG" ;;
+    p) PROJECT_NAME="$OPTARG" ;;
+    t) TYPE="$OPTARG" ;;
+    P) PORT="$OPTARG" ;;
+    s) SERVER_NAME="$OPTARG" ;;
+    *) echo "Invalid option: -$OPTARG" >&2; exit 1 ;;
+  esac
+done
+
+# Validate mandatory arguments
+: ${ENV_NAME:? "Missing -e [env_name]"}
+: ${PROJECT_NAME:? "Missing -p [project_name]"}
+: ${TYPE:? "Missing -t [type: frontend/backend]"}
+: ${SERVER_NAME:? "Missing -s [server_name]"}
+: ${PORT:=3603}  # Default port is 3603
+
+# Variables
+SOURCE_ENV="/home/dev/envs/${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}.env"
+DEST_DIR="/home/dev/sites/$PROJECT_NAME/${ENV_NAME}/${TYPE}"
+DEST_ENV="$DEST_DIR/.env"
+PM2_NAME="${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}"
+NGINX_CONF="/etc/nginx/sites-available/${PROJECT_NAME}_${ENV_NAME}_${TYPE}.conf"
+NGINX_LINK="/etc/nginx/sites-enabled/${PROJECT_NAME}_${ENV_NAME}_${TYPE}.conf"
+
+# Create source .env file if needed
+if [ ! -f "$SOURCE_ENV" ]; then
+    echo -e "KEY=DEFAULT_VALUE\nPORT=$PORT" > "$SOURCE_ENV" || exit_on_error "Failed to create $SOURCE_ENV"
+fi
+
+# Perform common operations
+common_operations
+
+# Manage PM2 process based on type
+pm2 delete "$PM2_NAME"
+if [ "$TYPE" == "frontend" ]; then
+    pm2 start "PORT=$PORT npm start" --name "$PM2_NAME" || exit_on_error "Failed to start PM2 process"
+elif [ "$TYPE" == "backend" ]; then
+    PORT=$PORT pm2 start build/src/index.js --name "$PM2_NAME" -i max || exit_on_error "Failed to start PM2 process"
+fi
+
+# Create Nginx configuration and symbolic link if they don't exist
+if [ ! -f "$NGINX_CONF" ] || [ ! -L "$NGINX_LINK" ]; then
+    # Nginx configuration here (same as your existing code)
+    sudo ln -s "$NGINX_CONF" "$NGINX_LINK"
+    sudo nginx -s reload || exit_on_error "Failed to reload Nginx"
+fi
