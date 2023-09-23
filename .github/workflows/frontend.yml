@@ -1,29 +1,29 @@
 name: Build and Deploy
 
 env:
-  PROJECT_NAME: avrean_dashboard # Change project name
-  PROJECT_TYPE: backend # Change to frontend for frontend deployment
-  WORKING_DIRECTORY: backend # Change to frontend for frontend deployment
+  PROJECT_NAME: XYZ # Change project name
+  PROJECT_TYPE: frontend # Change to frontend for frontend deployment
+  WORKING_DIRECTORY: frontend # Change to frontend for frontend deployment
   DEV_APP_PORT: 3618 # Update this port as needed
-  DEV_DOMAIN_NAME: bozo.avrean.net # Change domain name
+  DEV_DOMAIN_NAME: test.net # Change domain name
   PROD_APP_PORT: 3620 # Update this port as needed
-  PROD_DOMAIN_NAME: bozo.network  # Change domain name
+  PROD_DOMAIN_NAME: prodtest.network  # Change domain name
   ENABLE_CACHE: false
   ENABLE_CACHE_CONTROL: false
   ENABLE_RATE_LIMITING: false
-  DEV_SERVER_USER: ${{ secrets.SERVER_HETZNER_USER }}
-  DEV_SERVER_IP: ${{ secrets.SERVER_HETZNER_IP }}
-  DEV_SERVER_PASSWORD: ${{ secrets.SERVER_HETZNER_DEV_PASSWORD }}
-  PROD_SERVER_USER: ${{ secrets.SERVER_HETZNER_USER }}
-  PROD_SERVER_IP: ${{ secrets.SERVER_HETZNER_IP }}
-  PROD_SERVER_PASSWORD: ${{ secrets.SERVER_HETZNER_DEV_PASSWORD }}
+  DEV_SERVER_USER: ${{ secrets.SERVER__USER }}
+  DEV_SERVER_IP: ${{ secrets.SERVER__IP }}
+  DEV_SERVER_PASSWORD: ${{ secrets.SERVER__DEV_PASSWORD }}
+  PROD_SERVER_USER: ${{ secrets.SERVER__USER }}
+  PROD_SERVER_IP: ${{ secrets.SERVER__IP }}
+  PROD_SERVER_PASSWORD: ${{ secrets.SERVER__PROD_PASSWORD }}
 
 on:
   push:
     branches:
       - '*'
     paths:
-      - 'backend/**/*' # Change path
+      - 'frontend/**/*' # Change path
 
 jobs:
   build:

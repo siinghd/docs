@@ -43,8 +43,8 @@ if [ ! -z "$RATE_LIMIT" ] && [ -z "$RATE_BURST" ]; then
 fi
 
 # Variables
-SOURCE_ENV="/home/dev/envs/${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}.env"
-DEST_DIR="/home/dev/sites/$PROJECT_NAME/${ENV_NAME}/${TYPE}"
+SOURCE_ENV="/home/test/envs/${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}.env"
+DEST_DIR="/home/test/sites/$PROJECT_NAME/${ENV_NAME}/${TYPE}"
 DEST_ENV="$DEST_DIR/.env"
 PM2_NAME="${PROJECT_NAME}_${ENV_NAME}_${TYPE}"
 NGINX_CONF="/etc/nginx/sites-available/${PROJECT_NAME}_${ENV_NAME}_${TYPE}.conf"
@@ -111,19 +111,19 @@ fi
 /////////////////////////
 /////////////////////////
 //////////////////////////
-cp /home/dev/envs/ticketing_system_backend_prod.env /home/dev/sites/ticketing-system/prod/backend/.env
-cd /home/dev/sites/ticketing-system/prod/backend
+cp /home/test/envs/ticketing_system_backend_prod.env /home/test/sites/ticketing-system/prod/backend/.env
+cd /home/test/sites/ticketing-system/prod/backend
 pnpm install
 pnpm build
 pm2 delete ticketing_system_backend_prod
 pm2  --name ticketing_system_backend start build/src/index.js -i max
 
-cp /home/dev/envs/ticketing_system_frontend_dev.env /home/dev/sites/ticketing-system/dev/frontend/.env
-cd /home/dev/sites/ticketing-system/frontend
+cp /home/test/envs/ticketing_system_frontend_test.env /home/test/sites/ticketing-system/test/frontend/.env
+cd /home/test/sites/ticketing-system/frontend
 pnpm install
 pnpm build
-pm2 delete ticketing_system_frontend_dev
-pm2 start "PORT=3603 npm start" --name ticketing_system_frontend_dev
+pm2 delete ticketing_system_frontend_test
+pm2 start "PORT=3603 npm start" --name ticketing_system_frontend_test
 
 
 ///
@@ -137,10 +137,10 @@ function exit_on_error {
 }
 
 # Variables
-SOURCE_ENV="/home/dev/envs/ticketing_system_frontend_dev.env"
-DEST_DIR="/home/dev/sites/ticketing-system/frontend"
+SOURCE_ENV="/home/test/envs/ticketing_system_frontend_test.env"
+DEST_DIR="/home/test/sites/ticketing-system/frontend"
 DEST_ENV="$DEST_DIR/.env"
-PM2_NAME="ticketing_system_frontend_dev"
+PM2_NAME="ticketing_system_frontend_test"
 PORT=3603
 
 # Check and create source .env file if needed
@@ -177,8 +177,8 @@ function exit_on_error {
 }
 
 # Generalized Variables
-SOURCE_ENV="/home/dev/envs/service_prod.env"
-DEST_DIR="/home/dev/sites/service/prod"
+SOURCE_ENV="/home/test/envs/service_prod.env"
+DEST_DIR="/home/test/sites/service/prod"
 DEST_ENV="$DEST_DIR/.env"
 PM2_NAME="service_prod"
 
@@ -255,8 +255,8 @@ done
 : ${PORT:=3603}  # Default port is 3603
 
 # Variables
-SOURCE_ENV="/home/dev/envs/${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}.env"
-DEST_DIR="/home/dev/sites/$PROJECT_NAME/${ENV_NAME}/${TYPE}"
+SOURCE_ENV="/home/test/envs/${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}.env"
+DEST_DIR="/home/test/sites/$PROJECT_NAME/${ENV_NAME}/${TYPE}"
 DEST_ENV="$DEST_DIR/.env"
 PM2_NAME="${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}"
 NGINX_CONF="/etc/nginx/sites-available/${PROJECT_NAME}_${ENV_NAME}_${TYPE}.conf"

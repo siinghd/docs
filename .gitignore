@@ -1,0 +1,80 @@
+# --- Customs ---
+inventory.ini
+
+# --- Node.js / NPM ---
+node_modules/
+package-lock.json
+yarn.lock
+
+# --- React / Create React App ---
+build/
+*.map
+
+# --- Angular ---
+dist/
+tmp/
+out-tsc/
+
+# --- Vue.js ---
+dist/
+node_modules/
+
+# --- Python ---
+*.pyc
+*.pyo
+*.env
+__pycache__/
+*.egg-info/
+
+# --- Bash/Shell scripts ---
+*.swp
+*.swo
+*.bak
+
+# --- DevOps ---
+# Docker
+Dockerfile.*.bak
+*.env.example
+.dockerignore
+docker-compose.override.yml
+.docker/
+
+# Kubernetes
+*.yml.tmp
+.helm/
+charts/*.tgz
+
+# --- Logs and databases ---
+*.log
+*.sql
+*.sqlite
+
+# --- OS generated files ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- IDEs and editors ---
+.idea/
+.vscode/
+*.swp
+*.suo
+*.sln
+*.user
+*.userosscache
+*.sln.docstates
+
+# --- Various ---
+# dotenv environment variables file
+.env
+.env.test
+.cache
+*.sublime*
+
+# --- Misc ---
+*.tmp
+*.temp
+*.swp
+*.bak
+*.BAK
+*~
