@@ -2,7 +2,8 @@
   remote_user: '{{ target_user }}'
   become: yes
   vars:
-    ansible_ssh_pass: '{{ ssh_password }}'
+    ansible_ssh_pass: '{{ ssh_password if ssh_password is defined else omit }}'
+    ansible_ssh_private_key_file: '{{ ansible_ssh_private_key_file if ansible_ssh_private_key_file is defined else omit }}'
     ansible_become_pass: '{{ ansible_become_pass }}'
   vars_prompt:
     # - name: 'nginx_conf_name'
@@ -45,7 +46,7 @@
       register: nginx_test_output
       failed_when: '"failed" in nginx_test_output.stderr'
       notify: Reload nginx
-      
+
   handlers:
     - name: Reload nginx
       service:

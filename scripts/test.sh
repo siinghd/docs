@@ -2,7 +2,7 @@
 
 # Function to display usage information
 function display_usage {
-    echo "Usage: $0 -e ENV_NAME -p PROJECT_NAME -t TYPE -P PORT -s SERVER_NAME [-r ENABLE_RATE_LIMITING] [-b RATE_BURST] [-c ENABLE_CACHE] [-C ENABLE_CACHE_CONTROL] [-v VERBOSE]"
+    echo "Usage: $0 -e ENV_NAME -p PROJECT_NAME -t TYPE -d WORKING_DIRECTORY -P PORT -s SERVER_NAME [-r ENABLE_RATE_LIMITING] [-b RATE_BURST] [-c ENABLE_CACHE] [-C ENABLE_CACHE_CONTROL] [-v VERBOSE]"
     exit 1
 }
 # Function to sanitize a string by replacing non-alphanumeric characters with underscores
@@ -142,10 +142,10 @@ EOL"
 # Main function to execute the script
 function main {
     # Validate mandatory arguments
-    if [ -z "$ENV_NAME" ] || [ -z "$PROJECT_NAME" ] || [ -z "$TYPE" ] || [ -z "$SERVER_NAME" ]; then
+    [[ -z "$WORKING_DIRECTORY" || -z "$ENV_NAME" || -z "$PROJECT_NAME" || -z "$TYPE" || -z "$SERVER_NAME" ]] && {
         log_message "Missing one or more mandatory arguments."
-        display_usage  # Using display_usage instead of exit 1
-    fi
+        display_usage
+    }
 
     # Validate TYPE argument
     if [ "$TYPE" != "frontend" ] && [ "$TYPE" != "backend" ]; then
@@ -194,54 +194,51 @@ function main {
 : ${ENABLE_RATE_LIMITING:=false}
 : ${RATE_BURST:=5}
 
-# Parse command line arguments
-while getopts ":e:p:t:P:s:r:b:c:C:v:" opt; do
-  case $opt in
-    e) ENV_NAME="$OPTARG" ;;
-    p) PROJECT_NAME="$OPTARG" ;;
-    t) TYPE="$OPTARG" ;;
-    P) PORT="$OPTARG" ;;
-    s) SERVER_NAME="$OPTARG" ;;
-    r) ENABLE_RATE_LIMITING="$OPTARG" ;;
-    b) RATE_BURST="$OPTARG" ;;
-    c) ENABLE_CACHE="$OPTARG" ;;
-    C) ENABLE_CACHE_CONTROL="$OPTARG" ;;
-    v) VERBOSE="$OPTARG" ;;
-    *) log_message "Invalid option: -$OPTARG"; display_usage ;;
-  esac
+# Parse arguments
+
+while getopts ":e:p:d:t:P:s:r:b:c:C:v:" opt; do
+    case $opt in
+        e) ENV_NAME="$OPTARG";;
+        p) PROJECT_NAME="$OPTARG";;
+        t) TYPE="$OPTARG";;
+        P) PORT="$OPTARG";;
+        s) SERVER_NAME="$OPTARG";;
+        d) WORKING_DIRECTORY="$OPTARG";;
+        r) ENABLE_RATE_LIMITING="$OPTARG";;
+        b) RATE_BURST="$OPTARG";;
+        c) ENABLE_CACHE="$OPTARG";;
+        C) ENABLE_CACHE_CONTROL="$OPTARG";;
+        v) VERBOSE="$OPTARG";;
+        *) log_message "Invalid option: -$OPTARG"; display_usage ;;
+    esac
 done
 
-declare -A boolean_vars
+
 
 # Initialize the associative array
-boolean_vars["VERBOSE"]=$VERBOSE
-boolean_vars["ENABLE_CACHE"]=$ENABLE_CACHE
-boolean_vars["ENABLE_CACHE_CONTROL"]=$ENABLE_CACHE_CONTROL
-boolean_vars["ENABLE_RATE_LIMITING"]=$ENABLE_RATE_LIMITING
-# Validate boolean values
-for var_name in "${!boolean_vars[@]}"; do
-    var_value=${boolean_vars[$var_name]}
-    # log_message "Validating boolean for $var_name: $var_value"
-    if [ "$var_value" != "true" ] && [ "$var_value" != "false" ]; then
-        log_message "Invalid boolean value for $var_name: $var_value. Should be 'true' or 'false'."
-        display_usage
-    fi
-done
+# Validation
+declare -A boolean_vars=(
+    ["VERBOSE"]=$VERBOSE
+    ["ENABLE_CACHE"]=$ENABLE_CACHE
+    ["ENABLE_CACHE_CONTROL"]=$ENABLE_CACHE_CONTROL
+    ["ENABLE_RATE_LIMITING"]=$ENABLE_RATE_LIMITING
+)
 
-# Validate mandatory arguments
-if [ -z "$ENV_NAME" ] || [ -z "$PROJECT_NAME" ] || [ -z "$TYPE" ] || [ -z "$SERVER_NAME" ]; then
-    log_message "Missing one or more mandatory arguments."
-    display_usage
-fi
+for var_name in "${!boolean_vars[@]}"; do
+    [[ "${boolean_vars[$var_name]}" != "true" && "${boolean_vars[$var_name]}" != "false" ]] && {
+        log_message "Invalid boolean value for $var_name: ${boolean_vars[$var_name]}. Should be 'true' or 'false'."
+        display_usage
+    }
+done
 
 
 # Variables (based on the parsed options)
-SOURCE_ENV="/home/dev/envs/${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}.env"
-DEST_DIR="/home/dev/sites/$PROJECT_NAME/${ENV_NAME}/${TYPE}"
+SOURCE_ENV="/home/dev/envs/${PROJECT_NAME}_${ENV_NAME}_${WORKING_DIRECTORY}.env"
+DEST_DIR="/home/dev/sites/$PROJECT_NAME/${ENV_NAME}/${WORKING_DIRECTORY}"
 DEST_ENV="$DEST_DIR/.env"
-PM2_NAME="${PROJECT_NAME}_${ENV_NAME}_${TYPE:0:1}"
-NGINX_CONF="/etc/nginx/sites-available/${PROJECT_NAME}_${ENV_NAME}_${TYPE}.conf"
-NGINX_LINK="/etc/nginx/sites-enabled/${PROJECT_NAME}_${ENV_NAME}_${TYPE}.conf"
+PM2_NAME="${PROJECT_NAME}_${ENV_NAME}_${WORKING_DIRECTORY}"
+NGINX_CONF="/etc/nginx/sites-available/${PROJECT_NAME}_${ENV_NAME}_${WORKING_DIRECTORY}.conf"
+NGINX_LINK="/etc/nginx/sites-enabled/${PROJECT_NAME}_${ENV_NAME}_${WORKING_DIRECTORY}.conf"
 
 # Create source .env file if needed
 if [ ! -f "$SOURCE_ENV" ]; then

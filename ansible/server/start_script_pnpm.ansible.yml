@@ -1,0 +1,118 @@
+---
+- name: START SCRIPT
+  hosts: localhost
+  vars:
+    env_name: '{{ env_environment }}'
+    project_name: '{{ project_name }}'
+    project_type: '{{ project_type }}'
+    app_port: '{{ app_port }}'
+    working_directory: '{{ working_directory }}'
+    package_manager: '{{ package_manager }}'
+
+  tasks:
+    - name: Ensure pnpm is installed
+      ansible.builtin.command:
+        cmd: which pnpm
+      register: pnpm_check
+      ignore_errors: true
+
+    - name: Fail if pnpm is not installed
+      ansible.builtin.fail:
+        msg: 'pnpm not found, please install it first.'
+      when: pnpm_check.rc is undefined or pnpm_check.rc != 0
+
+    - name: Fail if pnpm is not installed
+      ansible.builtin.fail:
+        msg: 'pnpm not found, please install it first.'
+      when: pnpm_check.get('rc', 1) != 0
+
+    - name: Ensure destination directory exists
+      ansible.builtin.file:
+        path: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
+        state: directory
+        mode: '0755'
+      changed_when: false
+
+    - name: Check if .env file exists
+      ansible.builtin.stat:
+        path: '/home/dev/envs/{{ project_name }}_{{ env_name }}_{{ working_directory }}.env'
+      register: env_file_stat
+
+    - name: Manage .env file
+      block:
+        - name: Create default .env file
+          ansible.builtin.copy:
+            content: "KEY=VALUE\n"
+            dest: '/home/dev/envs/{{ project_name }}_{{ env_name }}_{{ working_directory }}.env'
+            mode: '0755'
+          when: not env_file_stat.stat.exists
+        - name: Copy existing .env file
+          ansible.builtin.copy:
+            src: '/home/dev/envs/{{ project_name }}_{{ env_name }}_{{ working_directory }}.env'
+            dest: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}/.env'
+            mode: '0664'
+          changed_when: false
+
+    - name: Install dependencies with pnpm
+      ansible.builtin.command:
+        cmd: pnpm install
+        chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
+      register: pnpm_install
+      changed_when: "'Packages: ' in pnpm_install.stdout"
+
+    - name: Lint and fix code
+      ansible.builtin.command:
+        cmd: pnpm lint:fix
+        chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
+      register: pnpm_lint
+      changed_when: "'Lint errors found' in pnpm_lint.stdout"
+
+    - name: Build the project
+      ansible.builtin.command:
+        cmd: pnpm build
+        chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
+      register: pnpm_build
+      changed_when: "'Build complete' in pnpm_build.stdout"
+
+    # ansible-lint disable=ignore_errors
+    - name: Delete existing PM2 process
+      ansible.builtin.command:
+        cmd: pm2 delete {{ project_name }}_{{ env_name }}_{{ working_directory }}
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Start PM2 process (frontend)
+      environment:
+        PORT: '{{ app_port }}'
+      ansible.builtin.command:
+        cmd: pm2 start npm --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -- start
+        chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
+      register: pm2_frontend
+      changed_when: "'started' in pm2_frontend.stdout"
+      when: project_type == 'frontend'
+
+    - name: Find index.js in multiple directories
+      ansible.builtin.find:
+        paths:
+          - '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}/build'
+          - '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}/dist'
+          - '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}/output'
+        patterns: 'index.js'
+        recurse: true
+      register: index_js_files
+
+    - name: Start PM2 process (backend)
+      environment:
+        PORT: '{{ app_port }}'
+      ansible.builtin.command:
+        cmd: pm2 start {{ item.path }} --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -i max
+        chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
+      register: pm2_backend
+      changed_when: "'started' in pm2_backend.stdout"
+      loop: '{{ index_js_files.files }}'
+      when: project_type == 'backend' and index_js_files.matched > 0
+
+    - name: Fail if no index.js is found
+      ansible.builtin.fail:
+        msg: 'No index.js found. Exiting.'
+      when: project_type == 'backend' and index_js_files.matched == 0
