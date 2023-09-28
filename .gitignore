@@ -1,6 +1,6 @@
 # --- Customs ---
 inventory.ini
-
+personal/*
 # --- Node.js / NPM ---
 node_modules/
 package-lock.json

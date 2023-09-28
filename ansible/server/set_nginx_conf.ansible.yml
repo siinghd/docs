@@ -1,0 +1,115 @@
+---
+- name: Setup Nginx
+  hosts: localhost # Target localhost
+  become: true # This disables sudo, set to true if sudo is needed
+  vars:
+    env_type: '{{ env_type }}'
+    project_name: '{{ project_name }}'
+    project_type: '{{ project_type }}'
+    working_directory: '{{ working_directory }}'
+    server_name: '{{ server_name }}'
+    app_port: '{{ port }}'
+    enable_rate_limiting: '{{ enable_rate_limiting | default(false) }}'
+    rate_burst: '{{ rate_burst | default(10) }}'
+    enable_cache: '{{ enable_cache | default(false) }}'
+    enable_cache_control: '{{ enable_cache_control | default(false) }}'
+
+  tasks:
+    - name: Sanitize server name
+      ansible.builtin.set_fact:
+        sanitized_server_name: "{{ server_name | regex_replace('[^a-zA-Z0-9]', '_') }}"
+
+    - name: Define rate limiting configuration
+      ansible.builtin.set_fact:
+        rate_limiting_config: |
+          limit_req_zone $binary_remote_addr zone=mylimit:1m rate={{ rate_burst }}r/s;
+          limit_req zone=mylimit;
+
+      when: enable_rate_limiting | bool
+
+    - name: Define caching configuration
+      ansible.builtin.set_fact:
+        caching_config: 'proxy_cache my_cache;'
+
+      when: enable_cache | bool
+
+    - name: Define cache control configuration
+      ansible.builtin.set_fact:
+        cache_control_config: |
+          {% if project_type == 'frontend' %}
+          add_header Cache-Control "public, max-age=31536000, immutable";
+          {% elif project_type == 'backend' %}
+          add_header Cache-Control "no-cache, no-store, must-revalidate";
+          {% endif %}
+
+      when: enable_cache_control | bool
+
+    # - name: Check if Nginx configuration file exists
+    #   ansible.builtin.stat:
+    #     path: '/etc/nginx/sites-available/{{ project_name }}_{{ env_type }}_{{ project_type }}_{{ working_directory }}.conf'
+    #   register: nginx_config_stat
+
+    - name: Create Nginx configuration
+      ansible.builtin.copy:
+        dest: '/etc/nginx/sites-available/{{ project_name }}_{{ env_type }}_{{ project_type }}_{{ working_directory }}.conf'
+        content: |
+          upstream {{ sanitized_server_name }}_loadbalancer {
+              server localhost:{{ app_port }};
+              # add more servers here if needed
+          }
+          server {
+              listen  80;
+              server_name {{ server_name }};
+              client_max_body_size 100m;
+
+              # Rate limiting
+              {{ rate_limiting_config | default('') }}
+
+              location / {
+                  proxy_pass http://{{ sanitized_server_name }}_loadbalancer;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host $host;
+                  proxy_cache_bypass $http_upgrade;
+
+                  # Cache Control
+                  {{ cache_control_config | default('') }}
+
+                  # Caching
+                  {{ caching_config | default('') }}
+              }
+
+              # Custom error pages
+              error_page  500 502 503 504  /50x.html;
+              location = /50x.html {
+                  root  /usr/share/nginx/html;
+              }
+          }
+        mode: '0644'
+      # when: not nginx_config_stat.stat.exists # Only when config file doesn't exist
+      register: nginx_config_created
+      notify:
+        - Overwrite symlink to sites-enabled if different from config file
+
+  handlers:
+    - name: Overwrite symlink to sites-enabled if different from config file
+      ansible.builtin.file:
+        src: '/etc/nginx/sites-available/{{ project_name }}_{{ env_type }}_{{ project_type }}_{{ working_directory }}.conf'
+        dest: '/etc/nginx/sites-enabled/{{ project_name }}_{{ env_type }}_{{ project_type }}_{{ working_directory }}.conf'
+        state: link
+        force: true
+        mode: '0777'
+      notify:
+        - Validate Nginx configuration
+
+    - name: Validate Nginx configuration
+      ansible.builtin.command: nginx -t
+      register: nginx_validation
+      changed_when: false
+
+    - name: Reload Nginx
+      ansible.builtin.command: nginx -s reload # Updated to use FQCN
+      when: nginx_validation is succeeded and nginx_validation.stdout is search("syntax is ok") and nginx_validation.stdout is search("test is successful")
+      register: nginx_reload
+      changed_when: "'Reloading nginx' in nginx_reload.stdout"

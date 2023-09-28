@@ -14,7 +14,7 @@
       ansible.builtin.command:
         cmd: which yarn
       register: yarn_check
-      ignore_errors: true
+      changed_when: false
 
     - name: Fail if yarn is not installed
       ansible.builtin.fail:
@@ -65,6 +65,7 @@
         cmd: yarn lint:fix
         chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
       register: yarn_lint
+      ignore_errors: true
       changed_when: "'Lint errors found' in yarn_lint.stdout"
 
     - name: Build the project
@@ -78,7 +79,7 @@
     - name: Delete existing PM2 process
       ansible.builtin.command:
         cmd: pm2 delete {{ project_name }}_{{ env_name }}_{{ working_directory }}
-      ignore_errors: yes
+      ignore_errors: true
       changed_when: false
 
     - name: Start PM2 process (frontend)
