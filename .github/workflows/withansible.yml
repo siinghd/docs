@@ -12,12 +12,12 @@ env:
   ENABLE_CACHE_CONTROL: false
   ENABLE_RATE_LIMITING: false
   RATE_BURST: 10
-  DEV_SERVER_USER: ${{ secrets.SERVER__USER }}
-  DEV_SERVER_IP: ${{ secrets.SERVER__IP }}
-  DEV_SERVER_PASSWORD: ${{ secrets.SERVER__DEV_PASSWORD }}
-  PROD_SERVER_USER: ${{ secrets.SERVER__USER }}
-  PROD_SERVER_IP: ${{ secrets.SERVER__IP }}
-  PROD_SERVER_PASSWORD: ${{ secrets.SERVER__PROD_PASSWORD }}
+  DEV_SERVER_USER: ${{ secrets.DEV_SERVER_HZN_USER }} #-> follow ports please
+  DEV_SERVER_IP: ${{ secrets.SERVER_HZN_HOSTNAME }}
+  DEV_SERVER_PASSWORD: ${{ secrets.DEV_SERVER_HZN_PASSWORD }}
+  PROD_SERVER_USER: ${{ secrets.PROD_SERVER_HZN_USER }}
+  PROD_SERVER_IP: ${{ secrets.PROD_SERVER_HZN_HOSTNAME }}
+  PROD_SERVER_PASSWORD: ${{ secrets.PROD_SERVER_HZN_PASSWORD }}
 
 on:
   push:
@@ -53,7 +53,7 @@ jobs:
 
   deploy:
     needs: [build]
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     if: (github.ref == 'refs/heads/dev' || github.ref == 'refs/heads/main') && success()
     defaults:
       run:
