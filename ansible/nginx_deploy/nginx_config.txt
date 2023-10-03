@@ -1,17 +1,17 @@
-upstream 213_loadbalancer {
-    server localhost:21;
+upstream dev_jupiter_avrean_net_loadbalancer {
+    server localhost:3624;
     # add more servers here if needed
 }
 server {
     listen  80;
-    server_name 213;
+    server_name dev-jupiter.avrean.net;
     client_max_body_size 100m;
 
     # Rate limiting
     
 
     location / {
-        proxy_pass http://213_loadbalancer;
+        proxy_pass http://dev_jupiter_avrean_net_loadbalancer;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';

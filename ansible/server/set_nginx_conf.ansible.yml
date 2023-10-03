@@ -106,10 +106,14 @@
     - name: Validate Nginx configuration
       ansible.builtin.command: nginx -t
       register: nginx_validation
-      changed_when: false
+      changed_when: true
+      notify:
+        - Reload Nginx
 
     - name: Reload Nginx
       ansible.builtin.command: nginx -s reload # Updated to use FQCN
-      when: nginx_validation is succeeded and nginx_validation.stdout is search("syntax is ok") and nginx_validation.stdout is search("test is successful")
+      when: 
+        - nginx_validation.stderr is search("syntax is ok")
+        - nginx_validation.stderr is search("test is successful")
       register: nginx_reload
       changed_when: "'Reloading nginx' in nginx_reload.stdout"
