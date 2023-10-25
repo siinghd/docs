@@ -44,7 +44,7 @@
           ansible.builtin.copy:
             content: "KEY=VALUE\n"
             dest: '/home/dev/envs/{{ project_name }}_{{ env_name }}_{{ working_directory }}.env'
-            mode: '0755'
+            mode: '0664'
           when: not env_file_stat.stat.exists
         - name: Copy existing .env file
           ansible.builtin.copy:
@@ -85,12 +85,24 @@
     - name: Start PM2 process (frontend)
       environment:
         PORT: '{{ app_port }}'
+        NODE_ENV: "{{ 'development' if env_name in ['dev', 'development'] else ('production' if env_name in ['prod', 'production'] else '') }}"
       ansible.builtin.command:
         cmd: pm2 start npm --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -- start
         chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
       register: pm2_frontend
       changed_when: "'started' in pm2_frontend.stdout"
       when: project_type == 'frontend'
+
+    - name: Try to start PM2 process with npm start (backend)
+      environment:
+        PORT: '{{ app_port }}'
+        NODE_ENV: "{{ 'development' if env_name in ['dev', 'development'] else ('production' if env_name in ['prod', 'production'] else '') }}"
+      ansible.builtin.command:
+        cmd: pm2 start npm --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -- start -i max
+        chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
+      register: pm2_npm_start
+      failed_when: false  # prevent playbook from failing if npm start doesn't work
+      when: project_type == 'backend'
 
     - name: Find index.js in multiple directories
       ansible.builtin.find:
@@ -101,19 +113,29 @@
         patterns: 'index.js'
         recurse: true
       register: index_js_files
+      when:
+        - project_type == 'backend'
+        - "'[ERROR]' in pm2_npm_start.stdout"  # adjust this line based on how pm2 logs errors
 
-    - name: Start PM2 process (backend)
+    - name: Fail if no index.js is found
+      ansible.builtin.fail:
+        msg: 'No index.js found. Exiting.'
+      when:
+        - project_type == 'backend'
+        - index_js_files.matched == 0
+        - "'[ERROR]' in pm2_npm_start.stdout"  # adjust this line based on how pm2 logs errors
+
+    - name: Start PM2 process (backend - file way)
       environment:
         PORT: '{{ app_port }}'
+        NODE_ENV: "{{ 'development' if env_name in ['dev', 'development'] else ('production' if env_name in ['prod', 'production'] else '') }}"
       ansible.builtin.command:
         cmd: pm2 start {{ item.path }} --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -i max
         chdir: '/home/dev/sites/{{ project_name }}/{{ env_name }}/{{ working_directory }}'
       register: pm2_backend
       changed_when: "'started' in pm2_backend.stdout"
       loop: '{{ index_js_files.files }}'
-      when: project_type == 'backend' and index_js_files.matched > 0
-
-    - name: Fail if no index.js is found
-      ansible.builtin.fail:
-        msg: 'No index.js found. Exiting.'
-      when: project_type == 'backend' and index_js_files.matched == 0
+      when:
+        - project_type == 'backend'
+        - index_js_files.matched > 0
+        - "'[ERROR]' in pm2_npm_start.stdout"

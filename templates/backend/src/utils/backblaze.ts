@@ -3,7 +3,7 @@
 /* eslint-disable no-await-in-loop */
 /* eslint-disable class-methods-use-this */
 import axios from 'axios';
-import { createHash } from 'node:crypto';
+
 import { callWithRetry } from './methods';
 
 class BackblazeB2Client {
@@ -15,11 +15,27 @@ class BackblazeB2Client {
 
   private authorizationExpiration: Date | null = null;
 
+  private uploadUrl: string | null = null;
+
+  private uploadAuthorizationToken: string | null = null;
+
+  private uploadUrlExpiration: Date | null = null;
+
+  private bucketName: string | null = null;
+
+  private accountId: string | null = null;
+
+  private downloadAuthorizationTokens: Map<
+    string,
+    { token: string; expiration: Date }
+  > = new Map();
+
   private static instance: BackblazeB2Client | null = null;
 
   private constructor(
     private keyId: string,
     private applicationKey: string,
+    private buckedId: string,
     private retries: number = 3,
     private retryDelay: number = 1000
   ) {
@@ -29,6 +45,7 @@ class BackblazeB2Client {
   static getInstance(
     keyId: string,
     applicationKey: string,
+    buckedId: string,
     retries?: number,
     retryDelay?: number
   ): BackblazeB2Client {
@@ -36,6 +53,7 @@ class BackblazeB2Client {
       this.instance = new BackblazeB2Client(
         keyId,
         applicationKey,
+        buckedId,
         retries,
         retryDelay
       );
@@ -63,192 +81,195 @@ class BackblazeB2Client {
     this.apiUrl = `${response.data.apiUrl}/b2api/v2`;
     this.authorizationToken = response.data.authorizationToken;
     this.downloadUrl = response.data.downloadUrl;
+    this.accountId = response.data.accountId;
     this.authorizationExpiration = new Date(
       Date.now() + 24 * 60 * 60 * 1000 - 60000
     );
-  }
+    // Clear the cache of download authorization tokens
+    this.downloadAuthorizationTokens.clear();
 
-  private async callAPI(
-    endpoint: string,
-    method: 'GET' | 'POST' = 'POST',
-    data: Record<string, any> = {},
-    params: Record<string, any> = {}
-  ): Promise<any> {
-    return callWithRetry(
-      async () => {
-        await this.authorize();
-        const headers = {
-          Authorization: this.authorizationToken,
-          'Content-Type': 'application/json',
-        };
-
-        const response = await axios({
-          method,
-          url: `${this.apiUrl}/${endpoint}`,
-          headers,
-          data,
-          params,
-        });
-
-        return response.data;
-      },
-      this.retries,
-      this.retryDelay
-    );
-  }
-
-  private calculateSHA1(data: Buffer): string {
-    const sha1 = createHash('sha1');
-    sha1.update(data);
-    return sha1.digest('hex');
-  }
-
-  // B2 Native API Methods
-  b2_authorize_account = () => this.authorize();
-
-  b2_cancel_large_file = (fileId: string) =>
-    this.callAPI('b2_cancel_large_file', 'POST', { fileId });
-
-  b2_copy_file = (params: Record<string, any>) =>
-    this.callAPI('b2_copy_file', 'POST', params);
-
-  b2_copy_part = (params: Record<string, any>) =>
-    this.callAPI('b2_copy_part', 'POST', params);
-
-  b2_create_bucket = (params: Record<string, any>) =>
-    this.callAPI('b2_create_bucket', 'POST', params);
-
-  b2_create_key = (params: Record<string, any>) =>
-    this.callAPI('b2_create_key', 'POST', params);
-
-  b2_delete_bucket = (params: Record<string, any>) =>
-    this.callAPI('b2_delete_bucket', 'POST', params);
-
-  b2_delete_file_version = (params: Record<string, any>) =>
-    this.callAPI('b2_delete_file_version', 'POST', params);
-
-  b2_delete_key = (params: Record<string, any>) =>
-    this.callAPI('b2_delete_key', 'POST', params);
-
-  b2_download_file_by_id = (params: Record<string, any>) =>
-    this.callAPI('b2_download_file_by_id', 'GET', params);
-
-  b2_download_file_by_name = (params: Record<string, any>) =>
-    this.callAPI('b2_download_file_by_name', 'GET', params);
-
-  b2_finish_large_file = (params: Record<string, any>) =>
-    this.callAPI('b2_finish_large_file', 'POST', params);
-
-  b2_get_download_authorization = (params: Record<string, any>) =>
-    this.callAPI('b2_get_download_authorization', 'POST', params);
-
-  b2_get_file_info = (params: Record<string, any>) =>
-    this.callAPI('b2_get_file_info', 'POST', params);
-
-  b2_get_upload_part_url = (params: Record<string, any>) =>
-    this.callAPI('b2_get_upload_part_url', 'POST', params);
-
-  b2_get_upload_url = (bucketId: string) =>
-    this.callAPI(
-      'b2_get_upload_url',
-      'GET',
-      {},
-      {
-        bucketId,
-      }
-    );
-
-  b2_hide_file = (params: Record<string, any>) =>
-    this.callAPI('b2_hide_file', 'POST', params);
-
-  b2_list_buckets = (params: Record<string, any>) =>
-    this.callAPI('b2_list_buckets', 'POST', params);
-
-  b2_list_file_names = (params: Record<string, any>) =>
-    this.callAPI('b2_list_file_names', 'POST', params);
-
-  b2_list_file_versions = (params: Record<string, any>) =>
-    this.callAPI('b2_list_file_versions', 'POST', params);
-
-  b2_list_keys = (params: Record<string, any>) =>
-    this.callAPI('b2_list_keys', 'POST', params);
-
-  b2_list_parts = (params: Record<string, any>) =>
-    this.callAPI('b2_list_parts', 'POST', params);
-
-  b2_list_unfinished_large_files = (params: Record<string, any>) =>
-    this.callAPI('b2_list_unfinished_large_files', 'POST', params);
-
-  b2_start_large_file = (params: Record<string, any>) =>
-    this.callAPI('b2_start_large_file', 'POST', params);
-
-  b2_update_bucket = (params: Record<string, any>) =>
-    this.callAPI('b2_update_bucket', 'POST', params);
-
-  b2_update_file_legal_hold = (params: Record<string, any>) =>
-    this.callAPI('b2_update_file_legal_hold', 'POST', params);
-
-  b2_update_file_retention = (params: Record<string, any>) =>
-    this.callAPI('b2_update_file_retention', 'POST', params);
-
-  b2_upload_file = (params: Record<string, any>) =>
-    this.callAPI('b2_upload_file', 'POST', params);
-
-  b2_upload_part = (params: Record<string, any>) =>
-    this.callAPI('b2_upload_part', 'POST', params);
-
-  // TODO:  Add other B2 Native API methods
-
-  async uploadLargeFile(
-    fileData: Buffer,
-    fileName: string,
-    bucketId: string
-  ): Promise<any> {
-    // Step 1: Start the large file upload
-    const startResponse = await this.b2_start_large_file({
-      bucketId,
-      fileName,
-      contentType: 'application/octet-stream',
-    });
-    const { fileId } = startResponse;
-
-    // Determine part size (minimum part size is 5MB)
-    const recommendedPartSize = Math.max(
-      startResponse.recommendedPartSize,
-      5 * 1024 * 1024
-    );
-    const totalParts = Math.ceil(fileData.length / recommendedPartSize);
-
-    // Step 2: Upload parts
-    for (let partNumber = 1; partNumber <= totalParts; partNumber += 1) {
-      const start = (partNumber - 1) * recommendedPartSize;
-      const end = partNumber * recommendedPartSize;
-      const partData = fileData.slice(start, end);
-
-      const uploadUrlResponse = await this.b2_get_upload_part_url({ fileId });
-      const { uploadUrl } = uploadUrlResponse;
-      const uploadAuthToken = uploadUrlResponse.authorizationToken;
-
-      const headers = {
-        Authorization: uploadAuthToken,
-        'Content-Length': partData.length.toString(),
-        'X-Bz-Part-Number': partNumber.toString(),
-        'X-Bz-Content-Sha1': 'do_not_verify', // Skipping SHA-1 verification
-      };
-      await callWithRetry(
-        async () => {
-          await axios.post(uploadUrl, partData, { headers });
-        },
+    if (this.authorizationToken && !this.bucketName) {
+      const responseBuckeName = await callWithRetry(
+        async () =>
+          axios.post(
+            `${this.apiUrl}/b2_list_buckets`,
+            { accountId: this.accountId, bucketId: this.buckedId },
+            {
+              headers: {
+                Authorization: this.authorizationToken,
+              },
+            }
+          ),
         this.retries,
         this.retryDelay
       );
+
+      const { buckets } = responseBuckeName.data;
+      const bucketInfo = buckets.find(
+        (bucket: any) => bucket.bucketId === this.buckedId
+      );
+      if (bucketInfo) {
+        this.bucketName = bucketInfo.bucketName;
+      } else {
+        throw new Error('Bucket ID not found.');
+      }
+    }
+  }
+
+  public async getUploadUrl(): Promise<{
+    uploadUrl: string;
+    uploadAuthorizationToken: string;
+  }> {
+    await this.authorize(); // Make sure we are authorized
+
+    if (!this.authorizationToken) {
+      throw new Error('Authorization token is not available.');
     }
 
-    // Step 3: Finish the large file upload
-    // Note: You'll need to modify the b2_finish_large_file method to work without partSha1Array
-    const finishResponse = await this.b2_finish_large_file({ fileId });
+    // Check if we already have a valid upload URL and token
+    if (
+      this.uploadUrl &&
+      this.uploadAuthorizationToken &&
+      this.uploadUrlExpiration &&
+      new Date() < this.uploadUrlExpiration
+    ) {
+      return {
+        uploadUrl: this.uploadUrl,
+        uploadAuthorizationToken: this.uploadAuthorizationToken,
+      };
+    }
 
-    return finishResponse;
+    // Otherwise, fetch a new upload URL and token
+    const response = await callWithRetry(
+      async () =>
+        axios.post(
+          `${this.apiUrl}/b2_get_upload_url`,
+          {
+            bucketId: this.buckedId,
+          },
+          {
+            headers: {
+              Authorization: this.authorizationToken,
+            },
+          }
+        ),
+      this.retries,
+      this.retryDelay
+    );
+
+    this.uploadUrl = response.data.uploadUrl;
+    this.uploadAuthorizationToken = response.data.authorizationToken;
+    this.uploadUrlExpiration = new Date(
+      Date.now() + 24 * 60 * 60 * 1000 - 60000
+    ); // Expires in almost 24 hours
+    if (!this.uploadUrl || !this.uploadAuthorizationToken) {
+      throw new Error('Upload URL or authorization token is not available.');
+    }
+    return {
+      uploadUrl: this.uploadUrl,
+      uploadAuthorizationToken: this.uploadAuthorizationToken,
+    };
+  }
+
+  private async getDownloadAuthorization(
+    fileNamePrefix: string,
+    validDurationInSeconds: number = 3600 // Default to 1 hour
+  ): Promise<string> {
+    await this.authorize(); // Make sure we are authorized
+
+    if (!this.authorizationToken) {
+      throw new Error('Authorization token is not available.');
+    }
+
+    const cachedTokenInfo =
+      this.downloadAuthorizationTokens.get(fileNamePrefix);
+
+    // Check if we have a valid cached download authorization token for the filename
+    if (cachedTokenInfo && new Date() < cachedTokenInfo.expiration) {
+      return cachedTokenInfo.token;
+    }
+
+    // Otherwise fetch a new download authorization token
+    const response = await callWithRetry(
+      async () =>
+        axios.post(
+          `${this.apiUrl}/b2_get_download_authorization`,
+          {
+            bucketId: this.buckedId,
+            fileNamePrefix,
+            validDurationInSeconds,
+          },
+          {
+            headers: {
+              Authorization: this.authorizationToken,
+            },
+          }
+        ),
+      this.retries,
+      this.retryDelay
+    );
+
+    const downloadAuthorizationToken = response.data.authorizationToken;
+
+    // Cache the new download authorization token and its expiration time
+    this.downloadAuthorizationTokens.set(fileNamePrefix, {
+      token: downloadAuthorizationToken,
+      expiration: new Date(Date.now() + validDurationInSeconds * 1000),
+    });
+
+    return downloadAuthorizationToken;
+  }
+
+  public async getAuthorizedDownloadUrl(
+    fileName: string,
+    validDurationInSeconds: number = 3600 // Default to 1 hour
+  ): Promise<string> {
+    const downloadAuthorizationToken = await this.getDownloadAuthorization(
+      fileName,
+      validDurationInSeconds
+    );
+
+    if (!this.downloadUrl || !this.bucketName) {
+      throw new Error('Download URL or bucket name is not available.');
+    }
+
+    // Construct the authorized download URL
+    const authorizedDownloadUrl = `${this.downloadUrl}/file/${this.bucketName}/${fileName}?Authorization=${downloadAuthorizationToken}`;
+
+    return authorizedDownloadUrl;
+  }
+
+  public async deleteFile(fileId: string, fileName: string): Promise<void> {
+    await this.authorize(); // Make sure we are authorized
+
+    if (!this.authorizationToken) {
+      throw new Error('Authorization token is not available.');
+    }
+
+    const response = await callWithRetry(
+      async () =>
+        axios.post(
+          `${this.apiUrl}/b2_delete_file_version`,
+          {
+            fileId,
+            fileName,
+          },
+          {
+            headers: {
+              Authorization: this.authorizationToken,
+            },
+          }
+        ),
+      this.retries,
+      this.retryDelay
+    );
+
+    if (response.status !== 200) {
+      throw new Error(`Failed to delete file: ${response.statusText}`);
+    }
+
+    // Remove cached download authorization token for the deleted file
+    this.downloadAuthorizationTokens.delete(fileName);
   }
 }
 

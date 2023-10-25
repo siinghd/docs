@@ -38,6 +38,15 @@ function manage_pm2_process {
     pm2 delete "$PM2_NAME" 2>/dev/null
     COMMAND=""
     OPTIONS=""
+    NODE_ENV_OPTION=""
+
+    # Determine NODE_ENV based on ENV_NAME
+    if [[ "$ENV_NAME" == "dev" || "$ENV_NAME" == "development" ]]; then
+        NODE_ENV_OPTION="NODE_ENV=development"
+    elif [[ "$ENV_NAME" == "prod" || "$ENV_NAME" == "production" ]]; then
+        NODE_ENV_OPTION="NODE_ENV=production"
+    fi
+
     if [ "$TYPE" == "frontend" ]; then
         if [ -f "package.json" ]; then
             COMMAND="npm start"
@@ -45,20 +54,31 @@ function manage_pm2_process {
             exit_on_error "package.json not found in directory $DEST_DIR"
         fi
     elif [ "$TYPE" == "backend" ]; then
-        if [ -f "build/src/index.js" ]; then
-            COMMAND="build/src/index.js"
-        elif [ -f "build/index.js" ]; then
-            COMMAND="build/index.js"
-        else
-            exit_on_error "Neither build/src/index.js nor build/index.js found. Exiting."
+        if [ ! -f "package.json" ]; then
+        exit_on_error "package.json not found in directory $DEST_DIR"
         fi
-        OPTIONS="-i max"
-    fi
 
+        # Check if a start script is defined in package.json
+        if jq -e .scripts.start package.json > /dev/null; then
+            COMMAND="npm start"
+        else
+            # Look for index.js in multiple directories
+            INDEX_JS_PATH=$(find "$DEST_DIR/build" "$DEST_DIR/dist" "$DEST_DIR/output" -type f -name 'index.js' -print -quit)
+            if [[ -n $INDEX_JS_PATH ]]; then
+                COMMAND="$INDEX_JS_PATH"
+                OPTIONS="-i max"
+            else
+                exit_on_error "No start script in package.json and no index.js found in build, dist, or output directories. Exiting."
+            fi
+        fi
+    fi
+    
+    export NODE_ENV
+    export PORT
     if [ -z "$OPTIONS" ]; then
-        PORT=$PORT pm2 start "$COMMAND" --name "$PM2_NAME"|| exit_on_error "Failed to start PM2 process"
+        pm2 start "$COMMAND" --name "$PM2_NAME"|| exit_on_error "Failed to start PM2 process"
     else
-        PORT=$PORT pm2 start "$COMMAND" --name "$PM2_NAME" "$OPTIONS"|| exit_on_error "Failed to start PM2 process"
+        pm2 start "$COMMAND" --name "$PM2_NAME" "$OPTIONS"|| exit_on_error "Failed to start PM2 process"
     fi
 }
 
@@ -67,8 +87,8 @@ function common_operations {
     log_message "Performing common operations..."
 
      # Check if pnpm is installed
-    if ! command -v pnpm &> /dev/null; then
-        exit_on_error "pnpm not found, please install it first."
+    if ! command -v $PKG_MANAGER &> /dev/null; then
+        exit_on_error "$PKG_MANAGER not found, please install it first."
     fi
 
      # Check if the destination directory exists, create it if not
@@ -77,9 +97,23 @@ function common_operations {
     fi
     cp "$SOURCE_ENV" "$DEST_ENV" || exit_on_error "Failed to copy .env file"
     cd "$DEST_DIR" || exit_on_error "Failed to change to directory $DEST_DIR"
-    pnpm install || exit_on_error "Failed to install dependencies"
-    pnpm lint:fix || log_message "Lint auto-fix script not found or failed to execute"
-    pnpm build || exit_on_error "Failed to build the project"
+
+    # check nvmrc file
+    if [ -f ".nvmrc" ]; then
+        # Load NVM
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  # This loads nvm
+        
+        # Install and use the specified Node.js version in .nvmrc
+        nvm install || exit_on_error "Failed to install Node.js version specified in .nvmrc"
+        nvm use || exit_on_error "Failed to switch to Node.js version specified in .nvmrc"
+    else
+        log_message ".nvmrc file not found. Skipping NVM operations."
+    fi
+
+    $PKG_MANAGER install || exit_on_error "Failed to install dependencies"
+    $PKG_MANAGER lint:fix || log_message "Lint auto-fix script not found or failed to execute"
+    $PKG_MANAGER build || exit_on_error "Failed to build the project"
 }
 # Function to set up Nginx
 function setup_nginx {
@@ -193,10 +227,10 @@ function main {
 : ${ENABLE_CACHE_CONTROL:=false}
 : ${ENABLE_RATE_LIMITING:=false}
 : ${RATE_BURST:=5}
-
+: ${PKG_MANAGER:=pnpm}
 # Parse arguments
 
-while getopts ":e:p:d:t:P:s:r:b:c:C:v:" opt; do
+while getopts ":e:p:d:t:P:s:r:b:c:C:v:m:" opt; do
     case $opt in
         e) ENV_NAME="$OPTARG";;
         p) PROJECT_NAME="$OPTARG";;
@@ -209,6 +243,7 @@ while getopts ":e:p:d:t:P:s:r:b:c:C:v:" opt; do
         c) ENABLE_CACHE="$OPTARG";;
         C) ENABLE_CACHE_CONTROL="$OPTARG";;
         v) VERBOSE="$OPTARG";;
+        m) PKG_MANAGER="$OPTARG";;
         *) log_message "Invalid option: -$OPTARG"; display_usage ;;
     esac
 done
@@ -245,6 +280,10 @@ if [ ! -f "$SOURCE_ENV" ]; then
     echo -e "KEY=DEFAULT_VALUE\nPORT=$PORT" > "$SOURCE_ENV" || exit_on_error "Failed to create $SOURCE_ENV"
 fi
 
+if [[ "$PKG_MANAGER" != "pnpm" && "$PKG_MANAGER" != "yarn" ]]; then
+    log_message "Invalid package manager: $PKG_MANAGER. Should be 'pnpm' or 'yarn'."
+    display_usage
+fi
 # Run the main function
 log_script_call "$@"
 

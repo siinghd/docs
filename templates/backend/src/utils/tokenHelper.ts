@@ -31,7 +31,6 @@ const cookieToken = async (user: any, res: Response) => {
       user,
     });
   } catch (err) {
-    console.log(err);
     res.status(500).json({
       success: false,
       message: 'Error in creating jwt token',

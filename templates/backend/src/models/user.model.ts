@@ -147,4 +147,23 @@ userSchema.methods.getForgotPasswordJwtToken = function () {
   );
 };
 
+// Index for unique fields
+userSchema.index({ uid: 1 });
+userSchema.index({ email: 1 });
+
+// Index for frequently queried fields
+userSchema.index({ role: 1 });
+userSchema.index({ isActive: 1 });
+
+
+// Index for text-based searches (if needed)
+// userSchema.index({ name: 'text', surname: 'text' });
+
+// Index for timestamps
+userSchema.index({ createdAt: 1 });
+userSchema.index({ updatedAt: 1 });
+
+// Index for fields that might be used in sorting or filtering
+userSchema.index({ phoneNumber: 1 });
+
 export = mongoose.model('User', userSchema);

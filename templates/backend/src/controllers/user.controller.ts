@@ -21,7 +21,25 @@ import { createHtmlTemplate } from '../utils/methods';
 import { createNotification } from '../utils/dbHelpers/notification';
 
 const emailService = new EmailService();
+
 // User Authentication Methods
+
+const removeExpiredTokens = async (user: any) => {
+  const validTokens = user.tokens.filter((token) => {
+    try {
+      const decoded = jwt.decode(token);
+      const expiry = decoded.exp * 1000;
+      const now = new Date().getTime();
+      return expiry > now;
+    } catch (err) {
+      return false;
+    }
+  });
+
+  user.tokens = validTokens;
+  await user.save();
+};
+
 export const signup = BigPromise(async (req, res, next) => {
   const { name, email, password, surname, phoneNumber } = req.body;
 
@@ -75,7 +93,8 @@ export const login = BigPromise(async (req, res, next) => {
       new CustomError('Email or password does not match or exist', 400)
     );
   }
-
+  // Remove expired tokens
+  await removeExpiredTokens(user);
   // if all goes good and we send the token
   cookieToken(user, res);
 });
