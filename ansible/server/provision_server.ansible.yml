@@ -1,75 +1,101 @@
-- hosts: localhost
+---
+- name: Provision Playground
+  hosts: localhost
+  connection: local
   become: yes
-  
+
   tasks:
+    - name: Update package list and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: dist
 
-  - name: Update apt caches
-    apt:
-      update_cache: yes
+    - name: Install required basic packages
+      apt:
+        name:
+          - curl
+          - gcc
+          - g++
+          - make
+          - software-properties-common
+          - gnupg
+        state: present
 
-  - name: Install dependencies
-    apt: 
-      name:
-        - build-essential
-        - python3-pip
-        - python3-dev
+    - name: Add NodeSource APT repository for Node.js
+      shell: |
+        curl -fsSL https://deb.nodesource.com/setup_16.x | sudo -E bash -
 
-  - name: Install Ansible dependencies
-    pip:
-      name:
-        - ansible
-        - pymongo  
+    - name: Install Node.js from NodeSource
+      apt:
+        name: nodejs
+        state: present
 
-  - name: Install Node.js
-    apt:
-      name: nodejs
+    - name: Install or Update NVM to v0.39.5
+      shell: |
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
 
-  - name: Install pnpm
-    npm:
-      name: pnpm
-      global: yes
+    - name: Install PM2
+      npm:
+        name: pm2
+        global: yes
 
-  - name: Install yarn
-    npm:
-      name: yarn
-      global: yes
+    - name: Install pnpm
+      npm:
+        name: pnpm
+        global: yes
 
-  - name: Install MongoDB
-    apt:
-      name: mongodb-org
+    - name: Install Yarn
+      npm:
+        name: yarn
+        global: yes
 
-  - name: Install MySQL
-    apt:
-      name: mysql-server
+    - name: Install gnupg and curl
+      apt:
+        name:
+          - gnupg
+          - curl
+        state: present
 
-  - name: Install Nginx
-    apt:
-      name: nginx
+    - name: Import MongoDB public GPG key
+      shell: |
+        curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
 
-  - name: Install PM2
-    npm:
-      name: pm2
-      global: yes
+    - name: Create MongoDB list file
+      shell: |
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
 
-  - name: Start MongoDB
-    service:
-      name: mongod
-      state: started
+    - name: Reload local package database
+      apt:
+        update_cache: yes
 
-  - name: Start MySQL
-    service:  
-      name: mysql
-      state: started
+    - name: Install MongoDB
+      apt:
+        name: mongodb-org
+        state: present
 
-  - name: Start Nginx
-    service:
-      name: nginx
-      state: started
+    - name: Pin MongoDB packages
+      shell: |
+        echo "mongodb-org hold" | sudo dpkg --set-selections
+        echo "mongodb-org-database hold" | sudo dpkg --set-selections
+        echo "mongodb-org-server hold" | sudo dpkg --set-selections
+        echo "mongodb-mongosh hold" | sudo dpkg --set-selections
+        echo "mongodb-org-mongos hold" | sudo dpkg --set-selections
+        echo "mongodb-org-tools hold" | sudo dpkg --set-selections
 
+    - name: Install MySQL Server
+      apt:
+        name: mysql-server
+        state: present
 
+    - name: Add Ondřej Surý PPA for NGINX
+      shell: |
+        sudo add-apt-repository -y ppa:ondrej/nginx
 
+    - name: Update package list
+      apt:
+        update_cache: yes
 
-
-
-
-      
+    - name: Install NGINX
+      apt:
+        name: nginx
+        state: present
