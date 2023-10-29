@@ -1,41 +1,38 @@
 - hosts: localhost
   become: yes
-
+  
   tasks:
 
-  - name: Update apt cache
-    apt: 
+  - name: Update apt caches
+    apt:
       update_cache: yes
 
-  - name: Install build tools
-    apt:
+  - name: Install dependencies
+    apt: 
       name:
         - build-essential
         - python3-pip
+        - python3-dev
 
   - name: Install Ansible dependencies
     pip:
       name:
         - ansible
-        - pymongo
-
-  - name: Install NVM
-    shell: |
-      curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.1/install.sh | bash
-      export NVM_DIR="$([ -z "${XDG_CONFIG_HOME-}" ] && printf %s "${HOME}/.nvm" || printf %s "${XDG_CONFIG_HOME}/nvm")"
-      [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"  
+        - pymongo  
 
   - name: Install Node.js
-    shell: nvm install node
+    apt:
+      name: nodejs
 
-  - name: Install Yarn
+  - name: Install pnpm
+    npm:
+      name: pnpm
+      global: yes
+
+  - name: Install yarn
     npm:
       name: yarn
       global: yes
-
-  - name: Install PNPM
-    shell: |
-      npm install -g pnpm
 
   - name: Install MongoDB
     apt:
@@ -46,7 +43,7 @@
       name: mysql-server
 
   - name: Install Nginx
-    apt: 
+    apt:
       name: nginx
 
   - name: Install PM2
@@ -58,9 +55,9 @@
     service:
       name: mongod
       state: started
-  
+
   - name: Start MySQL
-    service:
+    service:  
       name: mysql
       state: started
 
@@ -68,3 +65,11 @@
     service:
       name: nginx
       state: started
+
+
+
+
+
+
+
+      
