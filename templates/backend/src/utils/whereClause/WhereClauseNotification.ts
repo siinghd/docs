@@ -61,7 +61,7 @@ class WhereClauseNotification {
 
     // replace key with $key => key = gte => $gte
     stringOfCopyQ = stringOfCopyQ.replace(
-      /\b(gte|lte|gt|lt|in|or|and)\b/g,
+      /\b(gte|lte|gt|lt|in|ne|eq|exists)\b/g,
       (m) => `$${m}`
     );
 

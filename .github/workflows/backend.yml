@@ -24,6 +24,11 @@ on:
       - '*'
     paths:
       - 'backend/**/*'
+  workflow_dispatch: 
+    inputs:
+      ref:
+        description: 'The branch, tag or SHA to run this workflow on'
+        required: true
 
 jobs:
   build:
@@ -38,17 +43,9 @@ jobs:
         uses: actions/setup-node@v3
         with:
           node-version: 'latest'
-      - name: Cache Node.js packages
-        uses: actions/cache@v3
-        with:
-          path: ~/.pnpm-store
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-
-      - run: npm install -g pnpm
-      - run: pnpm install --no-frozen-lockfile
-      - run: pnpm run lint
-      - run: pnpm run build
+      - run: yarn
+      - run: yarn run lint:fix
+      - run: yarn run build
 
   deploy:
     needs: [build]

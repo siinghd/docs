@@ -24,21 +24,20 @@
         httpOnly: true,
       };
 
-      res.status(200).cookie('accessToken', accessToken, options).json({
-        success: true,
-        accessToken,
-        refreshToken,
-        user,
-      });
-    } catch (err) {
-      console.log(err);
-      res.status(500).json({
-        success: false,
-        message: 'Error in creating jwt token',
-        code: 'JWTERR',
-      });
-    }
-  };
+    res.status(200).cookie('accessToken', accessToken, options).json({
+      success: true,
+      accessToken,
+      refreshToken,
+      user,
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      message: 'Error in creating jwt token',
+      code: 'JWTERR',
+    });
+  }
+};
 
   const veryfyJwtToken = (token: string) => {
     try {

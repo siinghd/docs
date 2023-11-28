@@ -28,20 +28,23 @@ export = (func: CustomFunction) =>
     Promise.resolve(func(req, res, next, ...args)).catch((e) => {
       const errorMessage: any[] = [];
       let statusCode = 500;
+
       if (e.name === 'MongoServerError') {
         if (e.code === 11000) {
           return next(
             new CustomError(
-              `Value already exist in our system, value :${JSON.stringify(
-                e.keyValue
-              )}`,
+              e.message ||
+                `Value already exist in our system, value :${JSON.stringify(
+                  e.keyValue
+                )}`,
               422
             )
           );
         }
         return next(
           new CustomError(
-            'Something went wrong with our database, we will be back soon',
+            e.message ||
+              'Something went wrong with our database, we will be back soon',
             statusCode
           )
         );

@@ -42,4 +42,14 @@ const notificationSchema: mongoose.Schema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// Based on the type of notifications
+notificationSchema.index({ type: 1 });
+
+// If you're going to query based on whether the notification has been read
+notificationSchema.index({ isRead: 1 });
+
+// Timestamps for sorting
+notificationSchema.index({ createdAt: 1 });
+notificationSchema.index({ updatedAt: 1 });
+
 export = mongoose.model('Notification', notificationSchema);

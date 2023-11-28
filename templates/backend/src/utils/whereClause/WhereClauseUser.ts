@@ -103,7 +103,7 @@ class WhereClauseUser {
 
     // replace key with $key => key = gte => $gte
     stringOfCopyQ = stringOfCopyQ.replace(
-      /\b(gte|lte|gt|lt|in)\b/g,
+      /\b(gte|lte|gt|lt|in|ne|eq|exists)\b/g,
       (m) => `$${m}`
     );
 

@@ -1,91 +1,124 @@
 ---
-- hosts: '{{ selected_server }}'
-  remote_user: '{{ target_user }}'
-  vars:
-    ansible_ssh_pass: '{{ ssh_password if ssh_password is defined else omit }}'
-    ansible_ssh_private_key_file: '{{ ansible_ssh_private_key_file if ansible_ssh_private_key_file is defined else omit }}'
-    ansible_become_pass: '{{ ansible_become_pass }}'
-    ansible_become_method: sudo
+- name: Provision Playground
+  hosts: localhost
+  connection: local
+  become: yes
 
-  vars_prompt:
-    - name: 'new_user'
-      prompt: 'Enter the username for the new user'
-      private: no
-    - name: 'new_user_password'
-      prompt: 'Enter the password for the new user'
-      private: yes
+  vars:
+    NODE_MAJOR: '20'
 
   tasks:
-    - name: Install acl
-      apt:
-        name: acl
-        state: present
-      become: yes
-
-    - name: Update and upgrade apt packages
+    - name: Update package list and upgrade packages
       apt:
         update_cache: yes
-        upgrade: yes
-      become: yes
-      notify: restart nginx
-
-    - name: Add a new user
-      user:
-        name: '{{ new_user }}'
-        password: "{{ new_user_password | password_hash('sha512') }}"
-        groups: sudo
-      become: yes
-
-    - name: Fetch latest NVM version
-      shell: 'curl -s https://api.github.com/repos/nvm-sh/nvm/releases/latest | jq -r .tag_name'
-      register: latest_nvm_version
-      become: yes
-
-    - name: Install latest NVM version
-      shell: |
-        export NVM_VERSION="{{ latest_nvm_version.stdout }}"
-        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/$NVM_VERSION/install.sh | bash
-      become: yes
-
-    - name: Install essential packages
+        upgrade: dist
+      ignore_errors: yes
+      
+    - name: Install required basic packages
       apt:
         name:
+          - curl
           - gcc
           - g++
           - make
-          - nginx
-          - mysql-server
-      become: yes
-      ignore_errors: true
+          - software-properties-common
+          - gnupg
+        state: present
 
-    - name: Start essential services
-      systemd:
-        name: '{{ item }}'
-        state: started
-      loop:
-        - nginx
-        - mysql
-      become: yes
-
-    - name: Install Node.js global packages
-      npm:
-        name: '{{ item }}'
-        global: yes
-      loop:
-        - pm2
-        - pnpm
-      become: yes
-
-    - name: Install Yarn package manager
+    - name: Download and Import NodeSource GPG Key
       shell: |
-        curl -sL https://dl.yarnpkg.com/debian/pubkey.gpg | gpg --dearmor | sudo tee /usr/share/keyrings/yarnkey.gpg >/dev/null
-        echo "deb [signed-by=/usr/share/keyrings/yarnkey.gpg] https://dl.yarnpkg.com/debian stable main" | sudo tee /etc/apt/sources.list.d/yarn.list
-        sudo apt-get update && sudo apt-get install yarn
-      become: yes
+        sudo apt-get update
+        sudo apt-get install -y ca-certificates curl gnupg
+        sudo mkdir -p /etc/apt/keyrings
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+      args:
+        executable: /bin/bash
 
-  handlers:
-    - name: restart nginx
-      systemd:
+    - name: Add NodeSource Repository
+      shell: |
+        NODE_MAJOR={{NODE_MAJOR}} # change this to your desired Node.js version
+        echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | sudo tee /etc/apt/sources.list.d/nodesource.list
+      args:
+        executable: /bin/bash
+
+    - name: Install Node.js from NodeSource
+      shell: |
+        sudo apt-get update
+        sudo apt-get install nodejs -y
+      args:
+        executable: /bin/bash
+
+    - name: Install NVM and load it
+      shell: |
+        curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.5/install.sh | bash
+        export NVM_DIR="$HOME/.nvm"
+        [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+      args:
+        executable: /bin/bash
+    - name: Install PM2
+      npm:
+        name: pm2
+        global: yes
+
+    - name: Install pnpm
+      npm:
+        name: pnpm
+        global: yes
+
+    - name: Install Yarn
+      npm:
+        name: yarn
+        global: yes
+
+    - name: Install gnupg and curl
+      apt:
+        name:
+          - gnupg
+          - curl
+        state: present
+
+    - name: Import MongoDB public GPG key
+      shell: |
+        curl -fsSL https://pgp.mongodb.com/server-7.0.asc | sudo gpg --dearmor -o /usr/share/keyrings/mongodb-server-7.0.gpg
+
+    - name: Create MongoDB list file
+      shell: |
+        echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/7.0 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+
+    - name: Reload local package database
+      apt:
+        update_cache: yes
+
+    - name: Install MongoDB
+      apt:
+        name: mongodb-org
+        state: present
+
+    - name: Pin MongoDB packages
+      shell: |
+        echo "mongodb-org hold" | sudo dpkg --set-selections
+        echo "mongodb-org-database hold" | sudo dpkg --set-selections
+        echo "mongodb-org-server hold" | sudo dpkg --set-selections
+        echo "mongodb-mongosh hold" | sudo dpkg --set-selections
+        echo "mongodb-org-mongos hold" | sudo dpkg --set-selections
+        echo "mongodb-org-tools hold" | sudo dpkg --set-selections
+
+    - name: Install MySQL Server
+      apt:
+        name: mysql-server
+        state: present
+
+    - name: Add Ondřej Surý PPA for NGINX
+      shell: |
+        sudo add-apt-repository -y ppa:ondrej/nginx
+      ignore_errors: yes
+
+    - name: Update package list
+      apt:
+        update_cache: yes
+      ignore_errors: yes
+
+    - name: Install NGINX
+      apt:
         name: nginx
-        state: restarted
-      become: yes
+        state: present
