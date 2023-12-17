@@ -47,7 +47,8 @@
     "validator": "^13.11.0",
     "winston": "^3.11.0",
     "winston-mongodb": "^5.1.1",
-    "yamljs": "^0.3.0"
+    "yamljs": "^0.3.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@swc/cli": "^0.1.63",
