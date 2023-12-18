@@ -8,7 +8,7 @@
     app_port: '{{ app_port }}'
     working_directory: '{{ working_directory }}'
     package_manager: '{{ package_manager }}'
-
+    dotenv_key: "{{ dotenv_key }}"
   tasks:
     - name: Ensure pnpm is installed
       ansible.builtin.command:
@@ -85,6 +85,7 @@
     - name: Start PM2 process (frontend)
       environment:
         PORT: '{{ app_port }}'
+        DOTENV_KEY: "{{ dotenv_key }}"
         NODE_ENV: "{{ 'development' if env_name in ['dev', 'development'] else ('production' if env_name in ['prod', 'production'] else '') }}"
       ansible.builtin.command:
         cmd: pm2 start npm --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -- start
@@ -96,6 +97,7 @@
     - name: Try to start PM2 process with npm start (backend)
       environment:
         PORT: '{{ app_port }}'
+        DOTENV_KEY: "{{ dotenv_key }}"
         NODE_ENV: "{{ 'development' if env_name in ['dev', 'development'] else ('production' if env_name in ['prod', 'production'] else '') }}"
       ansible.builtin.command:
         cmd: pm2 start npm --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -- start -i max
@@ -128,6 +130,7 @@
     - name: Start PM2 process (backend - file way)
       environment:
         PORT: '{{ app_port }}'
+        DOTENV_KEY: "{{ dotenv_key }}"
         NODE_ENV: "{{ 'development' if env_name in ['dev', 'development'] else ('production' if env_name in ['prod', 'production'] else '') }}"
       ansible.builtin.command:
         cmd: pm2 start {{ item.path }} --name "{{ project_name }}_{{ env_name }}_{{ working_directory }}" -i max
